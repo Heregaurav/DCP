@@ -1,22 +1,33 @@
 import React, { useState, useEffect, useRef } from "react";
-// ⬇️ Importing the separated components
 import DynamicControlPanel from "./components/DynamicControlPanel/DynamicControlPanel";
 import DataTable from "./components/DataTable";
 import LoadingIndicator from "./components/LoadingIndicator";
+import EditableTable from './components/Table/EditableTable';
 import Error from "./components/Error";
-
-// --- Main App Component ---
+import { useUndoRedo } from './hooks/useUndoRedo';
 
 function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [dataSummary, setDataSummary] = useState(null);
-  const [displayData, setDisplayData] = useState(null);
   const [hiddenColumns, setHiddenColumns] = useState([]);
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const workerRef = useRef(null);
 
-  // --- NEW State for advanced features ---
+  // --- NEW: Undo/Redo for display data ---
+  const {
+    state: displayData,
+    setState: setDisplayData,
+    undo,
+    redo,
+    reset: resetHistory,
+    canUndo,
+    canRedo,
+    historySize,
+  } = useUndoRedo(null, 50); // Keep last 50 states
+
+  const [isEditMode, setIsEditMode] = useState(false);
+
   const [formattingMap, setFormattingMap] = useState({});
   const [groupedData, setGroupedData] = useState(null);
   const [pivotData, setPivotData] = useState(null);
@@ -35,9 +46,9 @@ function App() {
       if (type === "SUCCESS_ANALYSIS") {
         setDataSummary(payload.summary);
         setDisplayData(payload.previewData);
+        resetHistory(payload.previewData); // Reset history on new file
         setHiddenColumns(payload.hiddenColumns || []);
         setFormattingMap(payload.formattingMap || {});
-        // Clear all special views
         setGroupedData(null);
         setPivotData(null);
         setChartData(null);
@@ -47,40 +58,29 @@ function App() {
       } else if (type === "SUCCESS_UPDATE") {
         setDisplayData(payload.previewData);
 
-        // Update summary if provided (e.g., rename, add column)
         if (payload.summary) {
           setDataSummary(payload.summary);
         }
 
-        // Update hidden columns if provided
         if (payload.hiddenColumns) {
           setHiddenColumns(payload.hiddenColumns);
         }
 
-        // Update formatting if provided
         if (payload.formattingMap) {
           setFormattingMap(payload.formattingMap);
         }
 
-        // Data was updated, so clear specialized views
         setGroupedData(null);
         setPivotData(null);
         setChartData(null);
 
-        // Show success message if provided
         if (payload.message) {
           setSuccessMessage(payload.message);
           setTimeout(() => setSuccessMessage(null), 3000);
         }
 
-        console.log(
-          `✅ Data updated — rows shown: ${
-            payload?.rowCount ?? payload.previewData.length
-          }`
-        );
+        console.log(`✅ Data updated — rows shown: ${payload?.rowCount ?? payload.previewData.length}`);
       } else if (type === "SUCCESS_AGGREGATIONS") {
-        // This is now handled by the listener in DynamicControlPanel
-        // This log is just for confirmation
         console.log("✅ Aggregations computed:", payload.aggregations);
       } else if (type === "SUCCESS_DOWNLOAD") {
         console.log("✅ CSV download triggered from worker");
@@ -88,8 +88,7 @@ function App() {
         if (!payload?.csvString || payload.csvString.trim() === "") {
           setError({
             title: "Download Error",
-            message:
-              "CSV file is empty or could not be generated. Please reapply filters or try again.",
+            message: "CSV file is empty or could not be generated. Please reapply filters or try again.",
           });
           setIsProcessing(false);
           return;
@@ -110,30 +109,26 @@ function App() {
         setSuccessMessage("CSV downloaded successfully!");
         setTimeout(() => setSuccessMessage(null), 3000);
         console.log("💾 CSV downloaded successfully.");
-      }
-      // --- NEW Handlers for specialized views ---
-      else if (type === "SUCCESS_GROUPING") {
+      } else if (type === "SUCCESS_GROUPING") {
         setGroupedData(payload.groupedData);
-        setDisplayData(null); // Hide the main data table
+        setDisplayData(null);
         setPivotData(null);
         setChartData(null);
         setSuccessMessage(payload.message);
         setTimeout(() => setSuccessMessage(null), 3000);
       } else if (type === "SUCCESS_PIVOT") {
         setPivotData(payload.pivotData);
-        setDisplayData(null); // Hide the main data table
+        setDisplayData(null);
         setGroupedData(null);
         setChartData(null);
         setSuccessMessage(payload.message);
         setTimeout(() => setSuccessMessage(null), 3000);
       } else if (type === "SUCCESS_CHART_DATA") {
         setChartData(payload.chartData);
-        setDisplayData(null); // Hide the main data table
+        setDisplayData(null);
         setGroupedData(null);
         setPivotData(null);
-        // No message, just show data
       } else if (type === "SUCCESS_PARSE_FILE_2") {
-        // The panel handles the state, but we can show the message
         setSuccessMessage(payload.message);
         setTimeout(() => setSuccessMessage(null), 3000);
       } else if (type === "ERROR") {
@@ -162,15 +157,16 @@ function App() {
     setIsProcessing(true);
     setDataSummary(null);
     setDisplayData(null);
+    resetHistory(null);
     setHiddenColumns([]);
     setError(null);
     setSuccessMessage(null);
 
-    // Reset all new state
     setFormattingMap({});
     setGroupedData(null);
     setPivotData(null);
     setChartData(null);
+    setIsEditMode(false);
 
     workerRef.current.postMessage({
       type: "PARSE_FILE",
@@ -183,9 +179,6 @@ function App() {
     setError(null);
     setSuccessMessage(null);
 
-    // When a new process starts, clear specialized views
-    // unless it's one of *these* specific requests.
-    // The worker listener will handle setting the new view.
     if (
       ![
         "GROUP_AND_AGGREGATE",
@@ -204,8 +197,86 @@ function App() {
     });
   };
 
-  // Add worker reference to the process handler
   handleProcessRequest.worker = workerRef.current;
+
+  const handleDataChange = (updatedData) => {
+    console.log("Data updated in EditableTable:", updatedData);
+    setDisplayData(updatedData); // This will add to history automatically
+    
+    workerRef.current.postMessage({
+      type: "UPDATE_DATA_FROM_EDIT",
+      payload: { data: updatedData },
+    });
+    
+    setSuccessMessage("Cell updated successfully!");
+    setTimeout(() => setSuccessMessage(null), 2000);
+  };
+
+  const toggleEditMode = () => {
+    if (!displayData || displayData.length === 0) {
+      setError({
+        title: "No Data",
+        message: "Please load data before enabling edit mode.",
+      });
+      return;
+    }
+    setIsEditMode(!isEditMode);
+  };
+
+  // --- NEW: Undo/Redo handlers ---
+  const handleUndo = () => {
+    if (!canUndo) return;
+    
+    const previousState = undo();
+    if (previousState) {
+      // Sync with worker
+      workerRef.current.postMessage({
+        type: "UPDATE_DATA_FROM_EDIT",
+        payload: { data: previousState },
+      });
+      setSuccessMessage("Undo successful!");
+      setTimeout(() => setSuccessMessage(null), 2000);
+    }
+  };
+
+  const handleRedo = () => {
+    if (!canRedo) return;
+    
+    const nextState = redo();
+    if (nextState) {
+      // Sync with worker
+      workerRef.current.postMessage({
+        type: "UPDATE_DATA_FROM_EDIT",
+        payload: { data: nextState },
+      });
+      setSuccessMessage("Redo successful!");
+      setTimeout(() => setSuccessMessage(null), 2000);
+    }
+  };
+
+  // Keyboard shortcuts for undo/redo
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ctrl+Z or Cmd+Z for Undo
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+      }
+      // Ctrl+Shift+Z or Cmd+Shift+Z for Redo
+      else if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) {
+        e.preventDefault();
+        handleRedo();
+      }
+      // Ctrl+Y or Cmd+Y for Redo (alternative)
+      else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [canUndo, canRedo]);
 
   let content = (
     <div className="flex items-center justify-center h-40 bg-gray-50 rounded-lg">
@@ -226,17 +297,22 @@ function App() {
       />
     );
   } else if (displayData) {
-    // Only show the main data table if displayData is present
-    content = (
+    content = isEditMode ? (
+      <EditableTable
+        data={displayData}
+        summary={dataSummary}
+        hiddenColumns={hiddenColumns}
+        onDataChange={handleDataChange}
+      />
+    ) : (
       <DataTable
         headers={dataSummary.headers.filter((h) => !hiddenColumns.includes(h))}
         data={displayData}
         totalRows={dataSummary.totalRows}
-        formattingMap={formattingMap} // Pass formatting map
+        formattingMap={formattingMap}
       />
     );
   } else if (dataSummary && !groupedData && !pivotData && !chartData) {
-    // Case where filters result in 0 rows, but no special view is active
     content = (
       <DataTable
         headers={dataSummary.headers.filter((h) => !hiddenColumns.includes(h))}
@@ -246,10 +322,6 @@ function App() {
       />
     );
   } else if (dataSummary) {
-    // A special view (group, pivot, chart) is active.
-    // `displayData` is null, so the DataTable is hidden.
-    // The `DynamicControlPanel` is responsible for rendering the special view.
-    // We show a placeholder message here.
     content = (
       <div className="flex items-center justify-center h-40 bg-gray-50 rounded-lg">
         <p className="text-gray-500 text-center">
@@ -375,13 +447,89 @@ function App() {
               isProcessing={isProcessing}
               onProcess={handleProcessRequest}
               hiddenColumns={hiddenColumns}
-              worker={handleProcessRequest.worker} // Pass worker reference
+              worker={handleProcessRequest.worker}
               data={displayData}
             />
           )}
 
+          {/* NEW: Undo/Redo & Edit Mode Controls */}
+          {dataSummary && displayData && !groupedData && !pivotData && !chartData && (
+            <div className="mt-6 mb-4">
+              {/* Undo/Redo Bar */}
+              <div className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg border border-gray-200 mb-4">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleUndo}
+                    disabled={!canUndo}
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                    title="Undo (Ctrl+Z)"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                    </svg>
+                    Undo
+                  </button>
+                  <button
+                    onClick={handleRedo}
+                    disabled={!canRedo}
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                    title="Redo (Ctrl+Shift+Z)"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2m18-10l-6 6m6-6l-6-6" />
+                    </svg>
+                    Redo
+                  </button>
+                  <div className="ml-4 text-sm text-gray-600">
+                    <span className="font-medium">{historySize}</span> {historySize === 1 ? 'change' : 'changes'} in history
+                  </div>
+                </div>
+                <div className="text-xs text-gray-500">
+                  Shortcuts: Ctrl+Z (Undo) | Ctrl+Shift+Z or Ctrl+Y (Redo)
+                </div>
+              </div>
+
+              {/* Edit Mode Toggle */}
+              <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border border-purple-200">
+                <div className="flex items-center gap-3">
+                  <div className={`w-3 h-3 rounded-full ${isEditMode ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-800">
+                      {isEditMode ? '✏️ Edit Mode Active' : '👁️ View Mode'}
+                    </h3>
+                    <p className="text-xs text-gray-600">
+                      {isEditMode 
+                        ? 'Double-click any cell to edit. Changes are saved automatically and can be undone.' 
+                        : 'Enable edit mode to modify cell values directly in the table.'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={toggleEditMode}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                    isEditMode
+                      ? 'bg-gray-600 text-white hover:bg-gray-700'
+                      : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                  }`}
+                >
+                  {isEditMode ? '🔒 Lock Table' : '🔓 Enable Editing'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Data Display Section */}
           <section id="data-content" className="mt-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-800">
+                3. {isEditMode ? 'Edit Your Data' : 'View Your Data'}
+              </h2>
+              {displayData && displayData.length > 0 && (
+                <span className="text-sm text-gray-600">
+                  Showing {displayData.length} of {dataSummary?.totalRows || 0} rows
+                </span>
+              )}
+            </div>
             {content}
           </section>
         </div>
