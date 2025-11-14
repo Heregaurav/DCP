@@ -78,7 +78,7 @@ function App() {
         {/* Header */}
         <div className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
           <h1 className="text-3xl font-bold text-indigo-700">
-            Multi-Tab CSV Processor
+            Dynamic CSV Processor
           </h1>
           <p className="text-sm text-gray-600 mt-1">
             Work on multiple CSV files simultaneously
