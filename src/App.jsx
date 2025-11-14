@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from "react";
 import TabManager from "./components/TabManager/TabManager";
 import TabContent from "./components/TabManager/TabContent";
+import Profile from "./components/Profile";
 
 function App() {
   const [tabs, setTabs] = useState([
@@ -68,6 +69,11 @@ function App() {
 
   return (
     <main className="min-h-screen bg-linear-to-b from-gray-50 to-gray-100">
+      {/* Profile Icon - Fixed Top Right */}
+      <div className="fixed top-6 right-6 z-50">
+        <Profile />
+      </div>
+
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
