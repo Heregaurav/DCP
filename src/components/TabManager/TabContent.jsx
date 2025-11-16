@@ -7,6 +7,7 @@ import Error from "../Error";
 import { useUndoRedo } from '../../hooks/useUndoRedo';
 import { useCsvHistory } from '../../hooks/useCsvHistory';
 
+
 function TabContent({ 
   tabId, 
   isActive,
@@ -40,6 +41,7 @@ function TabContent({
   const { saveCsvToHistory } = useCsvHistory();
   const workerRef = useRef(null);
 
+
   const {
     state: displayData,
     setState: setDisplayData,
@@ -51,6 +53,7 @@ function TabContent({
     historySize,
   } = useUndoRedo(null, 50);
 
+
   // Send data to App.jsx
   useEffect(() => {
     if (onDataSummaryChange) {
@@ -58,11 +61,13 @@ function TabContent({
     }
   }, [dataSummary, onDataSummaryChange]);
 
+
   useEffect(() => {
     if (onEditModeChange) {
       onEditModeChange(isEditMode);
     }
   }, [isEditMode, onEditModeChange]);
+
 
   useEffect(() => {
     if (onHistoryChange) {
@@ -70,17 +75,20 @@ function TabContent({
     }
   }, [canUndo, canRedo, historySize, onHistoryChange]);
 
+
   useEffect(() => {
     if (onDisplayDataChange) {
       onDisplayDataChange(displayData);
     }
   }, [displayData, onDisplayDataChange]);
 
+
   useEffect(() => {
     if (onHiddenColumnsChange) {
       onHiddenColumnsChange(hiddenColumns);
     }
   }, [hiddenColumns, onHiddenColumnsChange]);
+
 
   const toggleEditMode = useCallback(() => {
     if (!displayData || displayData.length === 0) {
@@ -93,11 +101,13 @@ function TabContent({
     setIsEditMode(!isEditMode);
   }, [displayData, isEditMode]);
 
+
   useEffect(() => {
     if (onToggleEditModeRegister && isActive) {
       onToggleEditModeRegister(toggleEditMode);
     }
   }, [toggleEditMode, onToggleEditModeRegister, isActive]);
+
 
   useEffect(() => {
     console.log(`Initializing worker for tab ${tabId}`);
@@ -106,9 +116,11 @@ function TabContent({
       { type: "module" }
     );
 
+
     workerRef.current.onmessage = async (event) => {
       const { type, payload } = event.data;
       console.log(`[Tab ${tabId}] Worker message:`, type);
+
 
       if (type === "SUCCESS_ANALYSIS") {
         setDataSummary(payload.summary);
@@ -149,12 +161,14 @@ function TabContent({
           return;
         }
 
+
         const blob = new Blob([payload.csvString], {
           type: "text/csv;charset=utf-8;",
         });
         
         const fileName = payload.customFileName || `processed_${Date.now()}.csv`;
         const destinationPath = payload.destinationPath;
+
 
         if (destinationPath) {
           try {
@@ -203,9 +217,11 @@ function TabContent({
         setError({ title: "Processing Error", message: payload.message });
       }
 
+
       setIsProcessing(false);
       setUploadAnimation(false);
     };
+
 
     workerRef.current.onerror = (err) => {
       console.error(`[Tab ${tabId}] Worker error:`, err);
@@ -214,15 +230,18 @@ function TabContent({
       setUploadAnimation(false);
     };
 
+
     return () => {
       console.log(`Terminating worker for tab ${tabId}`);
       workerRef.current?.terminate();
     };
   }, [tabId]);
 
+
   const handleFileChange = useCallback((event) => {
     const file = event.target.files[0];
     if (!file) return;
+
 
     console.log(`[Tab ${tabId}] Loading file:`, file.name);
     setIsProcessing(true);
@@ -239,13 +258,16 @@ function TabContent({
     setChartData(null);
     setIsEditMode(false);
 
+
     workerRef.current?.postMessage({
       type: "PARSE_FILE",
       payload: { file },
     });
 
+
     onFileLoaded?.(file.name);
   }, [tabId, onFileLoaded, resetHistory, setDisplayData]);
+
 
   const performBrowserDownload = (blob, fileName) => {
     const url = URL.createObjectURL(blob);
@@ -261,10 +283,12 @@ function TabContent({
     setTimeout(() => setSuccessMessage(null), 3000);
   };
 
+
   const handleProcessRequest = useCallback((type, payload = {}) => {
     setIsProcessing(true);
     setError(null);
     setSuccessMessage(null);
+
 
     if (!["GROUP_AND_AGGREGATE", "GENERATE_PIVOT_TABLE", "GET_CHART_DATA"].includes(type)) {
       setGroupedData(null);
@@ -272,10 +296,13 @@ function TabContent({
       setChartData(null);
     }
 
+
     workerRef.current?.postMessage({ type, payload });
   }, []);
 
+
   handleProcessRequest.worker = workerRef.current;
+
 
   const handleDataChange = useCallback((updatedData) => {
     if (JSON.stringify(updatedData) !== JSON.stringify(displayData)) {
@@ -289,6 +316,7 @@ function TabContent({
       onDataModified?.();
     }
   }, [displayData, setDisplayData, onDataModified]);
+
 
   const handleUndo = useCallback(() => {
     if (!canUndo) return;
@@ -304,6 +332,7 @@ function TabContent({
     }
   }, [canUndo, undo, onDataModified]);
 
+
   const handleRedo = useCallback(() => {
     if (!canRedo) return;
     const nextState = redo();
@@ -318,11 +347,14 @@ function TabContent({
     }
   }, [canRedo, redo, onDataModified]);
 
+
   useEffect(() => {
     if (!isActive) return;
 
+
     const handleKeyDown = (e) => {
       if (!displayData || isProcessing) return;
+
 
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
@@ -336,9 +368,11 @@ function TabContent({
       }
     };
 
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isActive, handleUndo, handleRedo, displayData, isProcessing]);
+
 
   let content = (
     <div className="flex items-center justify-center h-40 bg-gray-50 rounded-lg">
@@ -347,6 +381,7 @@ function TabContent({
       </p>
     </div>
   );
+
 
   if (isProcessing) {
     content = <LoadingIndicator text="Processing... please wait." />;
@@ -395,6 +430,7 @@ function TabContent({
     );
   }
 
+
   return (
     <div className={`tab-content relative ${!isActive ? 'hidden' : ''}`}>
       {/* Subtle Background Particles - Professional */}
@@ -403,6 +439,7 @@ function TabContent({
         <div className="particle particle-2"></div>
         <div className="particle particle-3"></div>
       </div>
+
 
       <style jsx>{`
         /* Subtle floating particles */
@@ -448,6 +485,7 @@ function TabContent({
           }
         }
 
+
         /* Professional upload progress indicator */
         .upload-progress-overlay {
           position: fixed;
@@ -461,6 +499,7 @@ function TabContent({
           animation: fadeIn 0.3s ease-out;
         }
 
+
         @keyframes fadeIn {
           from {
             opacity: 0;
@@ -469,6 +508,7 @@ function TabContent({
             opacity: 1;
           }
         }
+
 
         .upload-spinner {
           width: 60px;
@@ -479,21 +519,25 @@ function TabContent({
           animation: spin 0.8s linear infinite;
         }
 
+
         @keyframes spin {
           to {
             transform: rotate(360deg);
           }
         }
 
+
         .upload-progress-content {
           text-align: center;
         }
+
 
         .upload-dots {
           display: inline-flex;
           gap: 6px;
           margin-left: 4px;
         }
+
 
         .upload-dot {
           width: 6px;
@@ -503,13 +547,16 @@ function TabContent({
           animation: dotPulse 1.4s infinite ease-in-out;
         }
 
+
         .upload-dot:nth-child(2) {
           animation-delay: 0.2s;
         }
 
+
         .upload-dot:nth-child(3) {
           animation-delay: 0.4s;
         }
+
 
         @keyframes dotPulse {
           0%, 80%, 100% {
@@ -521,6 +568,7 @@ function TabContent({
             transform: scale(1.1);
           }
         }
+
 
         /* Success checkmark animation */
         .success-overlay {
@@ -535,6 +583,7 @@ function TabContent({
           animation: fadeIn 0.2s ease-out;
         }
 
+
         .success-checkmark {
           width: 80px;
           height: 80px;
@@ -544,6 +593,7 @@ function TabContent({
           animation: scaleIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
 
+
         @keyframes scaleIn {
           from {
             transform: scale(0);
@@ -552,6 +602,7 @@ function TabContent({
             transform: scale(1);
           }
         }
+
 
         .checkmark-circle {
           stroke-dasharray: 166;
@@ -563,6 +614,7 @@ function TabContent({
           animation-delay: 0.2s;
         }
 
+
         .checkmark-check {
           transform-origin: 50% 50%;
           stroke-dasharray: 48;
@@ -573,17 +625,20 @@ function TabContent({
           animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.4s forwards;
         }
 
+
         @keyframes stroke {
           100% {
             stroke-dashoffset: 0;
           }
         }
 
+
         /* Subtle shimmer on upload box */
         .upload-active {
           position: relative;
           overflow: hidden;
         }
+
 
         .upload-active::before {
           content: '';
@@ -601,6 +656,7 @@ function TabContent({
           animation: shimmer 2s infinite;
         }
 
+
         @keyframes shimmer {
           0% {
             left: -100%;
@@ -610,6 +666,7 @@ function TabContent({
           }
         }
       `}</style>
+
 
       {/* Professional Upload Progress Animation */}
       {uploadAnimation && (
@@ -629,6 +686,7 @@ function TabContent({
         </div>
       )}
 
+
       {/* Success Animation - Elegant Checkmark */}
       {showSuccessAnimation && (
         <div className="success-overlay">
@@ -641,6 +699,7 @@ function TabContent({
         </div>
       )}
 
+
       {successMessage && (
         <div className="mb-4 p-4 bg-green-50 border border-green-200 text-green-700 rounded-xl flex items-center justify-between shadow-sm">
           <div className="flex items-center">
@@ -652,6 +711,7 @@ function TabContent({
           <button onClick={() => setSuccessMessage(null)} className="text-green-600 hover:text-green-800 transition-colors">✕</button>
         </div>
       )}
+
 
       {/* Upload Section */}
       <section className="file-upload-section mb-8">
@@ -722,6 +782,7 @@ function TabContent({
         </div>
       </section>
 
+
       {dataSummary && activeTool && (
         <div className="mb-6">
           <div className="bg-blue-50 rounded-xl p-6 border-2 border-blue-200">
@@ -750,6 +811,7 @@ function TabContent({
         </div>
       )}
 
+
       {dataSummary && !activeTool && (
         <div className="mb-6">
           <div className="bg-blue-50 rounded-2xl p-8 border-2 border-dashed border-blue-300">
@@ -762,6 +824,7 @@ function TabContent({
         </div>
       )}
 
+
       {dataSummary && displayData && !groupedData && !pivotData && !chartData && (
         <section className="mt-8">
           <div className="flex items-center justify-between mb-5">
@@ -771,6 +834,7 @@ function TabContent({
           <div className="border-2 border-blue-200 rounded-2xl overflow-hidden bg-white shadow-lg">
             {content}
           </div>
+
 
           {displayData && displayData.length > 0 && (
             <div className="mt-5 grid grid-cols-3 gap-4">
@@ -812,4 +876,5 @@ function TabContent({
   );
 }
 
-export default TabContent;
+
+export default TabContent;  
