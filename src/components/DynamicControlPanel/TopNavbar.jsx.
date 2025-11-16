@@ -1,0 +1,79 @@
+import React from 'react';
+
+function TopNavbar({ toggleSidebar, currentView, setCurrentView }) {
+  return (
+    <nav className="bg-white shadow-md sticky top-0 z-50">
+      <div className="px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center h-16">
+          {/* Left side - Hamburger Menu Icon */}
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={toggleSidebar}
+              className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              aria-label="Toggle Sidebar"
+            >
+              <svg
+                className="w-6 h-6 text-gray-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
+              </svg>
+            </button>
+            <h1 className="text-xl font-bold text-gray-800">CSV Processor</h1>
+          </div>
+
+          {/* Center - Navigation Links */}
+          <div className="hidden md:flex space-x-1">
+            <button
+              onClick={() => setCurrentView('home')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                currentView === 'home'
+                  ? 'bg-blue-500 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              Home
+            </button>
+            <button
+              onClick={() => setCurrentView('about')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                currentView === 'about'
+                  ? 'bg-blue-500 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              About
+            </button>
+            <button
+              onClick={() => setCurrentView('profile')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                currentView === 'profile'
+                  ? 'bg-blue-500 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              Profile
+            </button>
+          </div>
+
+          {/* Right side - Profile Icon */}
+          <div className="flex items-center">
+            <button className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold hover:bg-blue-600 transition-colors">
+              S
+            </button>
+          </div>
+        </div>
+      </div>
+    </nav>
+  );
+}
+
+export default TopNavbar;
+
