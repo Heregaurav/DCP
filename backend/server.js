@@ -6,7 +6,7 @@ import { db, auth } from './firebaseAdmin.js';
 dotenv.config();
 
 const app = express();
-const frontend_url = process.env.FRONTEND_URL || process.env.FORNTEND_URL || "http://localhost:5173";
+const frontend_url = process.env.FRONTEND_URL || process.env.FORNTEND_URL || "http://localhost:5174";
 const PORT = process.env.PORT || 5000;
 
 // Middleware
