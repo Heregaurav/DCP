@@ -35,9 +35,19 @@ function AdvancedTools({
         <button
           type="button"
           onClick={handleToggleChat}
-          className="p-2 rounded text-sm font-medium bg-purple-600 text-white hover:bg-purple-700 transition-colors"
+          className="p-2 rounded text-sm font-medium bg-[var(--primary)] text-white hover:bg-[var(--primary-600)] transition-colors flex items-center gap-2"
         >
-          {showChat ? '✕ Close AI Chat' : '🤖 Ask AI'}
+          {showChat ? (
+            <>
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M6 6l12 12M6 18L18 6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <span>Close AI Chat</span>
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+              <span>Ask AI</span>
+            </>
+          )}
         </button>
         <button
           onClick={() => toggleTool('add_row')}

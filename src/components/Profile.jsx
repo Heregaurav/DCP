@@ -202,8 +202,9 @@ function Profile() {
                         onClick={() => deleteCsvFromHistory(csv.id)}
                         className="ml-2 text-xs text-red-600 hover:text-red-700 font-medium transition"
                         title="Remove from history"
+                        aria-label="Remove from history"
                       >
-                        ✕
+                        <svg className="w-3 h-3 inline-block" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 6l12 12M6 18L18 6" strokeLinecap="round" strokeLinejoin="round"/></svg>
                       </button>
                     </div>
                   ))}

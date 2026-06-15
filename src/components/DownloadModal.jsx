@@ -80,13 +80,13 @@ function DownloadModal({ isOpen, onConfirm, onCancel, isProcessing }) {
               className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:bg-gray-100 text-left transition"
             >
               {destinationPath 
-                ? <span className="text-green-600 font-medium">✓ Folder Selected</span>
+                ? <span className="text-green-600 font-medium">Folder Selected</span>
                 : <span className="text-gray-500">Choose Destination Folder...</span>
               }
             </button>
             <p className="text-xs text-gray-500 mt-1">
               {destinationPath 
-                ? '✓ Custom folder selected' 
+                ? 'Custom folder selected' 
                 : 'Optional: Choose a custom location (default is Downloads)'}
             </p>
           </div>

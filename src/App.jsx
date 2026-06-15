@@ -1,462 +1,858 @@
 import React, { useState, useCallback } from "react";
+import {
+  ArrowUpDown, Search, Settings2, Eraser, BarChart2, FlaskConical,
+  Layers, TableProperties, GitMerge, FunctionSquare, LineChart,
+  Download, Upload, Bell, Menu, X, Home, Wrench, FileText, Info,
+  Undo2, Redo2, Lock, PenLine, ChevronRight, Plus, Star,
+  SlidersHorizontal, Eye, Hash, Filter
+} from "lucide-react";
 import TabManager from "./components/TabManager/TabManager";
 import TabContent from "./components/TabManager/TabContent";
 import Profile from "./components/Profile";
 
-function App() {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeTool, setActiveTool] = useState(null);
-  const [currentView, setCurrentView] = useState('home');
+/* ─── Palette ─────────────────────────────────────────────────────────────── */
+const C = {
+  yellow:     "#FFF3B0",
+  yellowMid:  "#FFD60A",
+  yellowDeep: "#F5B800",
+  black:      "#1A1A1A",
+  grayDark:   "#3D3D3D",
+  grayMid:    "#888",
+  grayLight:  "#E8E8E8",
+  grayLighter:"#F2F2EE",
+  white:      "#FFFFFF",
+  pageBg:     "#F5F5F0",
+};
 
-  const [tabs, setTabs] = useState([
-    { id: 1, fileName: null, modified: false }
-  ]);
+/* ─── Tool definitions ────────────────────────────────────────────────────── */
+const TOOLS = [
+  { id:"sort",       name:"Sort Data",      desc:"Sort columns ascending or descending", Icon:ArrowUpDown,      cat:"basics"    },
+  { id:"filter",     name:"Filter Data",    desc:"Filter rows by keyword or value",      Icon:Filter,           cat:"basics"    },
+  { id:"columns",    name:"Manage Columns", desc:"Show, hide, or rename columns",        Icon:SlidersHorizontal,cat:"basics"    },
+  { id:"cleaning",   name:"Clean Data",     desc:"Remove duplicates & empty rows",       Icon:Eraser,           cat:"basics"    },
+  { id:"statistics", name:"Statistics",     desc:"Sum, avg, min, max per column",        Icon:BarChart2,        cat:"analytics" },
+  { id:"advanced",   name:"Advanced",       desc:"Advanced data operations",             Icon:FlaskConical,     cat:"analytics" },
+  { id:"grouping",   name:"Group Data",     desc:"Group rows by column values",          Icon:Layers,           cat:"analytics" },
+  { id:"pivot",      name:"Pivot Table",    desc:"Create pivot tables instantly",        Icon:TableProperties,  cat:"analytics" },
+  { id:"merge",      name:"Merge Files",    desc:"Combine multiple datasets",            Icon:GitMerge,         cat:"advanced"  },
+  { id:"formula",    name:"Formula Column", desc:"Add calculated columns",               Icon:FunctionSquare,   cat:"advanced"  },
+  { id:"chart",      name:"Visualize",      desc:"Charts & graphs from your data",       Icon:LineChart,        cat:"advanced"  },
+  { id:"download",   name:"Download",       desc:"Export processed data as CSV",         Icon:Download,         cat:"advanced"  },
+];
+
+const CATS = [
+  { id:"all",       label:"All"       },
+  { id:"basics",    label:"Basics"    },
+  { id:"analytics", label:"Analytics" },
+  { id:"advanced",  label:"Advanced"  },
+];
+
+/* ─── Tiny style helpers ──────────────────────────────────────────────────── */
+const flex  = (align="center", justify="flex-start", gap=0) =>
+  ({ display:"flex", alignItems:align, justifyContent:justify, gap });
+const card  = (extra={}) => ({
+  background: C.white, borderRadius:16,
+  border:`1.5px solid ${C.grayLight}`, ...extra,
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+export default function App() {
+  const [sidebarOpen,    setSidebarOpen]    = useState(false);
+  const [activeTool,     setActiveTool]     = useState(null);
+  const [currentView,    setCurrentView]    = useState("home");
+  const [activeCat,      setActiveCat]      = useState("all");
+  const [mobileTab,      setMobileTab]      = useState("home");
+
+  const [tabs,      setTabs]      = useState([{ id:1, fileName:null, modified:false }]);
   const [activeTab, setActiveTab] = useState(1);
-  const [nextTabId, setNextTabId] = useState(2);
+  const [nextId,    setNextId]    = useState(2);
 
-  // State for the right sidebar and undo/redo controls
-  const [currentDataSummary, setCurrentDataSummary] = useState(null);
-  const [currentEditMode, setCurrentEditMode] = useState(false);
-  const [currentHistory, setCurrentHistory] = useState({ canUndo: false, canRedo: false, historySize: 0 });
-  const [currentDisplayData, setCurrentDisplayData] = useState(null);
-  const [currentHiddenColumns, setCurrentHiddenColumns] = useState([]);
-  const [editModeToggler, setEditModeToggler] = useState(null);
-  const [undoHandler, setUndoHandler] = useState(null);
-  const [redoHandler, setRedoHandler] = useState(null);
+  const [dataSummary,    setDataSummary]    = useState(null);
+  const [editMode,       setEditMode]       = useState(false);
+  const [history,        setHistory]        = useState({ canUndo:false, canRedo:false, historySize:0 });
+  const [displayData,    setDisplayData]    = useState(null);
+  const [hiddenCols,     setHiddenCols]     = useState([]);
+  const [editToggler,    setEditToggler]    = useState(null);
+  const [undoFn,         setUndoFn]         = useState(null);
+  const [redoFn,         setRedoFn]         = useState(null);
 
-  const hasLoadedFiles = tabs.some(tab => tab.fileName !== null);
+  const hasFiles = tabs.some(t => t.fileName !== null);
 
-  // Tab and sidebar logic
-  const toggleSidebar = useCallback(() => {
-    setSidebarOpen(prev => !prev);
-  }, []);
+  /* handlers */
+  const toggleSidebar  = useCallback(() => setSidebarOpen(p => !p), []);
+  const handleTabAdd   = useCallback(() => {
+    setTabs(p => [...p, { id:nextId, fileName:null, modified:false }]);
+    setActiveTab(nextId); setNextId(p => p+1);
+  }, [nextId]);
+  const handleTabClose = useCallback((id) => {
+    const t = tabs.find(x => x.id===id);
+    if (t?.modified && !window.confirm(`Close "${t.fileName||`Tab ${id}`}"? Unsaved changes will be lost.`)) return;
+    setTabs(p => { const n=p.filter(x=>x.id!==id); return n.length?n:[{id:nextId,fileName:null,modified:false}]; });
+    if (activeTab===id) { const r=tabs.filter(x=>x.id!==id); if(r.length) setActiveTab(r[0].id); }
+  }, [tabs, activeTab, nextId]);
+  const handleTabChange    = useCallback(id => setActiveTab(id), []);
+  const handleFileLoaded   = useCallback((id,name) => setTabs(p=>p.map(t=>t.id===id?{...t,fileName:name,modified:false}:t)),[]);
+  const handleDataModified = useCallback(id => setTabs(p=>p.map(t=>t.id===id?{...t,modified:true}:t)),[]);
+  const handleToolSelect   = useCallback(id => {
+    if (!hasFiles) { alert("Upload a CSV file first."); return; }
+    setActiveTool(id); setSidebarOpen(false);
+  }, [hasFiles]);
 
-  const handleTabAdd = useCallback(() => {
-    const newTab = {
-      id: nextTabId,
-      fileName: null,
-      modified: false
-    };
-    setTabs(prev => [...prev, newTab]);
-    setActiveTab(nextTabId);
-    setNextTabId(prev => prev + 1);
-  }, [nextTabId]);
+  const filteredTools = activeCat==="all" ? TOOLS : TOOLS.filter(t=>t.cat===activeCat);
+  const activeTool_   = TOOLS.find(t=>t.id===activeTool);
 
-  const handleTabClose = useCallback((tabId) => {
-    const tab = tabs.find(t => t.id === tabId);
-    if (tab?.modified) {
-      if (!window.confirm(`Tab "${tab.fileName || `Tab ${tabId}`}" has unsaved changes. Close anyway?`)) {
-        return;
-      }
-    }
+  /* ── NAV ITEM ────────────────────────────────────────────────────────────── */
+  const NavItem = ({ view, label }) => (
+    <button
+      onClick={()=>setCurrentView(view)}
+      style={{
+        padding:"7px 18px", borderRadius:100, border:"none",
+        background: currentView===view ? C.black : "transparent",
+        color: currentView===view ? C.yellowMid : C.grayDark,
+        fontWeight:600, fontSize:13, cursor:"pointer",
+        transition:"all 0.2s",
+      }}
+    >{label}</button>
+  );
 
-    setTabs(prev => {
-      const newTabs = prev.filter(t => t.id !== tabId);
-      if (newTabs.length === 0) {
-        return [{ id: nextTabId, fileName: null, modified: false }];
-      }
-      return newTabs;
-    });
+  /* ── SIDEBAR TOOL ITEM ───────────────────────────────────────────────────── */
+  const SidebarTool = ({ tool }) => {
+    const active = activeTool===tool.id && hasFiles;
+    return (
+      <button
+        onClick={()=>handleToolSelect(tool.id)}
+        style={{
+          display:"flex", alignItems:"center", gap:12,
+          width:"100%", padding:"10px 14px", borderRadius:12,
+          border:"none", textAlign:"left", cursor:"pointer",
+          background: active ? C.black : "transparent",
+          transition:"all 0.18s", marginBottom:2,
+        }}
+        onMouseEnter={e=>{ if(!active) e.currentTarget.style.background=C.grayLighter; }}
+        onMouseLeave={e=>{ if(!active) e.currentTarget.style.background="transparent"; }}
+      >
+        <span style={{
+          width:34, height:34, borderRadius:10, flexShrink:0,
+          background: active ? "#ffffff22" : C.yellow,
+          display:"flex", alignItems:"center", justifyContent:"center",
+        }}>
+          <tool.Icon size={16} color={active ? C.yellowMid : C.grayDark} />
+        </span>
+        <span style={{ flex:1 }}>
+          <span style={{ display:"block", fontSize:13, fontWeight:600,
+            color: active ? C.yellowMid : C.black }}>{tool.name}</span>
+          <span style={{ fontSize:11, color: active ? "#aaa" : C.grayMid,
+            lineHeight:1.3 }}>{tool.desc}</span>
+        </span>
+        {active && <ChevronRight size={14} color={C.yellowMid} />}
+      </button>
+    );
+  };
 
-    if (activeTab === tabId) {
-      const remainingTabs = tabs.filter(t => t.id !== tabId);
-      if (remainingTabs.length > 0) {
-        setActiveTab(remainingTabs[0].id);
-      }
-    }
-  }, [tabs, activeTab, nextTabId]);
-
-  const handleTabChange = useCallback((tabId) => {
-    setActiveTab(tabId);
-  }, []);
-
-  const handleFileLoaded = useCallback((tabId, fileName) => {
-    setTabs(prev => prev.map(tab =>
-      tab.id === tabId ? { ...tab, fileName, modified: false } : tab
-    ));
-  }, []);
-
-  const handleDataModified = useCallback((tabId) => {
-    setTabs(prev => prev.map(tab =>
-      tab.id === tabId ? { ...tab, modified: true } : tab
-    ));
-  }, []);
-
-  const handleToolSelect = useCallback((toolId) => {
-    if (!hasLoadedFiles) {
-      alert('⚠️ Please upload a CSV file first to use the tools.');
-      return;
-    }
-    setActiveTool(toolId);
-    if (window.innerWidth < 1024) {
-      setSidebarOpen(false);
-    }
-  }, [hasLoadedFiles]);
-
-  // Define available tools for the left sidebar
-  const tools = [
-    { id: 'sort', name: 'Sort Data', icon: '⇅', description: 'Sort columns ascending/descending' },
-    { id: 'filter', name: 'Filter Data', icon: '🔍', description: 'Filter rows by keyword' },
-    { id: 'columns', name: 'Manage Columns', icon: '▦', description: 'Show/hide/rename columns' },
-    { id: 'cleaning', name: 'Data Cleaning', icon: '🧹', description: 'Remove duplicates & empty rows' },
-    { id: 'statistics', name: 'Statistics', icon: '📊', description: 'Calculate sum, avg, min, max' },
-    { id: 'advanced', name: 'Advanced Tools', icon: '⚙️', description: 'Advanced operations' },
-    { id: 'grouping', name: 'Group Data', icon: '📁', description: 'Group by column values' },
-    { id: 'pivot', name: 'Pivot Table', icon: '📋', description: 'Create pivot tables' },
-    { id: 'merge', name: 'Merge Files', icon: '🔗', description: 'Combine multiple datasets' },
-    { id: 'formula', name: 'Formula Column', icon: '🔢', description: 'Add calculated columns' },
-    { id: 'chart', name: 'Visualize', icon: '📈', description: 'Create charts & graphs' },
-    { id: 'download', name: 'Download', icon: '⬇️', description: 'Export processed data' }
-  ];
-
-  return (
-    <div className="min-h-screen relative overflow-hidden">
-      <div className="fixed inset-0 -z-10">
-        {/* Gradient and particles background */}
-        <div 
-          className="absolute inset-0 bg-gradient-to-br from-blue-100 via-white to-blue-200 animate-gradient"
-          style={{
-            backgroundSize: '400% 400%',
-            animation: 'gradient-shift 15s ease infinite'
-          }}
-        />
-        <div className="absolute inset-0 opacity-20">
-          <div className="absolute top-0 left-0 bg-blue-300 rounded-full w-96 h-96 mix-blend-overlay filter blur-3xl animate-pulse" />
-          <div className="absolute bottom-0 right-0 bg-blue-400 rounded-full w-96 h-96 mix-blend-overlay filter blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
-          <div className="absolute top-1/2 left-1/2 bg-white rounded-full w-96 h-96 mix-blend-overlay filter blur-3xl animate-pulse" style={{ animationDelay: '4s' }} />
-        </div>
+  /* ── STAT CARD ────────────────────────────────────────────────────────────── */
+  const StatCard = ({ label, value, dark, icon: Icon }) => (
+    <div style={{
+      ...card(), padding:"18px 20px",
+      background: dark ? C.black : C.white,
+      border: dark ? "none" : `1.5px solid ${C.grayLight}`,
+    }}>
+      <div style={{ ...flex("center","space-between"), marginBottom:10 }}>
+        <span style={{ fontSize:12, fontWeight:600, color: dark ? "#aaa" : C.grayMid,
+          textTransform:"uppercase", letterSpacing:"0.05em" }}>{label}</span>
+        {Icon && <span style={{
+          width:28, height:28, borderRadius:8,
+          background: dark ? "#ffffff15" : C.yellow,
+          display:"flex", alignItems:"center", justifyContent:"center",
+        }}><Icon size={14} color={dark ? C.yellowMid : C.yellowDeep} /></span>}
       </div>
+      <div style={{ fontSize:28, fontWeight:700, color: dark ? C.yellowMid : C.black }}>
+        {value ?? "—"}
+      </div>
+    </div>
+  );
 
-      <style jsx>{`
-        @keyframes gradient-shift {
-          0%, 100% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-        }
-      `}</style>
-
-      {/* Top Navigation */}
-      <nav className="fixed top-0 left-0 right-0 bg-white shadow-xl z-50 border-b border-gray-200 backdrop-blur-sm bg-opacity-95">
-        <div className="px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={toggleSidebar}
-                className="p-2.5 rounded-xl hover:bg-blue-50 transition-all duration-300 group relative overflow-hidden"
-                aria-label="Toggle Tools Sidebar"
-              >
-                <div className="absolute inset-0 bg-blue-600 opacity-0 group-hover:opacity-10 transition-opacity duration-300"></div>
-                <svg className="w-6 h-6 text-gray-700 group-hover:text-blue-600 transition-all duration-300 group-hover:scale-110" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Centered navigation for Home/About */}
-            <div className="absolute left-1/2 transform -translate-x-1/2 hidden md:flex items-center space-x-1 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl p-1.5 shadow-inner border border-gray-200">
-              <button
-                onClick={() => setCurrentView('home')}
-                className={`px-5 py-2.5 rounded-lg font-semibold transition-all duration-300 transform ${
-                  currentView === 'home'
-                    ? 'bg-white text-blue-600 shadow-lg scale-105 ring-2 ring-blue-100'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
-                }`}
-              >
-                Home
-              </button>
-              <button
-                onClick={() => setCurrentView('about')}
-                className={`px-5 py-2.5 rounded-lg font-semibold transition-all duration-300 transform ${
-                  currentView === 'about'
-                    ? 'bg-white text-blue-600 shadow-lg scale-105 ring-2 ring-blue-100'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-white/50'
-                }`}
-              >
-                About
-              </button>
-            </div>
-
-            <div className="flex items-center">
-              <Profile />
-            </div>
-          </div>
+  /* ── TOOL CARD (homepage grid) ───────────────────────────────────────────── */
+  const ToolCard = ({ tool, featured }) => {
+    const active = activeTool===tool.id && hasFiles;
+    return (
+      <div
+        role="button" tabIndex={0}
+        onClick={()=>handleToolSelect(tool.id)}
+        onKeyDown={e=>e.key==="Enter"&&handleToolSelect(tool.id)}
+        style={{
+          ...card(), padding:"20px 18px", cursor:"pointer",
+          background: featured ? C.black : (active ? C.yellow : C.white),
+          border: active ? `2px solid ${C.yellowDeep}` : (featured ? "none" : `1.5px solid ${C.grayLight}`),
+          transition:"all 0.18s",
+          boxShadow: active ? `0 0 0 4px ${C.yellowMid}33` : "none",
+        }}
+        onMouseEnter={e=>{ if(!active&&!featured) e.currentTarget.style.background=C.grayLighter; }}
+        onMouseLeave={e=>{ if(!active&&!featured) e.currentTarget.style.background=C.white; }}
+      >
+        <div style={{
+          width:44, height:44, borderRadius:12, marginBottom:14,
+          background: featured ? "#ffffff15" : (active ? C.yellowDeep+"22" : C.yellow),
+          display:"flex", alignItems:"center", justifyContent:"center",
+        }}>
+          <tool.Icon size={22} color={featured ? C.yellowMid : (active ? C.yellowDeep : C.grayDark)} />
         </div>
-        <div className="absolute top-4 left-20">
-          <h1 className="text-2xl font-extrabold tracking-tight text-blue-600 drop-shadow-sm">DCP</h1>
+        <div style={{ fontSize:14, fontWeight:700, marginBottom:4,
+          color: featured ? C.yellowMid : C.black }}>{tool.name}</div>
+        <div style={{ fontSize:12, color: featured ? "#aaa" : C.grayMid,
+          lineHeight:1.5 }}>{tool.desc}</div>
+      </div>
+    );
+  };
+
+  /* ════════════════════════════════════════════════════════════════════════════
+     RENDER
+  ════════════════════════════════════════════════════════════════════════════ */
+  return (
+    <div style={{ minHeight:"100vh", background:C.pageBg,
+      fontFamily:"'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+      color:C.black, WebkitTapHighlightColor:"transparent" }}>
+
+      {/* ── TOP NAV ─────────────────────────────────────────────────────────── */}
+      <nav style={{
+        position:"fixed", top:0, left:0, right:0, zIndex:100,
+        background:C.white, borderBottom:`1px solid ${C.grayLight}`,
+        height:60, display:"flex", alignItems:"center",
+        justifyContent:"space-between", padding:"0 24px",
+        backdropFilter:"blur(8px)",
+      }}>
+        {/* Left: hamburger + brand */}
+        <div style={flex("center","flex-start",14)}>
+          <button onClick={toggleSidebar} style={{
+            width:38, height:38, borderRadius:10, border:`1.5px solid ${C.grayLight}`,
+            background:C.white, cursor:"pointer",
+            display:"flex", alignItems:"center", justifyContent:"center",
+          }}>
+            {sidebarOpen
+              ? <X size={18} color={C.black} />
+              : <Menu size={18} color={C.black} />}
+          </button>
+          <div style={{ display:"flex", alignItems:"baseline", gap:2 }}>
+            <span style={{ fontSize:22, fontWeight:800, letterSpacing:"-0.5px", color:C.black }}>D</span>
+            <span style={{ fontSize:22, fontWeight:800, letterSpacing:"-0.5px", color:C.yellowDeep }}>C</span>
+            <span style={{ fontSize:22, fontWeight:800, letterSpacing:"-0.5px", color:C.black }}>P</span>
+          </div>
+          {/* Active tool badge */}
+          {activeTool_ && hasFiles && (
+            <div style={{
+              display:"flex", alignItems:"center", gap:6,
+              background:C.yellow, borderRadius:100, padding:"4px 12px",
+              border:`1px solid ${C.yellowDeep}`,
+            }}>
+              <activeTool_.Icon size={13} color={C.yellowDeep} />
+              <span style={{ fontSize:12, fontWeight:600, color:C.grayDark }}>{activeTool_.name}</span>
+              <button onClick={()=>setActiveTool(null)} style={{
+                border:"none", background:"none", cursor:"pointer", padding:0,
+                display:"flex", alignItems:"center",
+              }}><X size={12} color={C.grayMid} /></button>
+            </div>
+          )}
+        </div>
+
+        {/* Center: view switcher (hidden on mobile) */}
+        <div className="desktop-only" style={{
+          display:"flex", gap:2,
+          background:C.grayLighter, borderRadius:100, padding:3,
+        }}>
+          <NavItem view="home"  label="Home"  />
+          <NavItem view="about" label="About" />
+        </div>
+
+        {/* Right: bell + profile */}
+        <div style={flex("center","flex-end",10)}>
+          <button style={{
+            width:38, height:38, borderRadius:10, border:`1.5px solid ${C.grayLight}`,
+            background:C.white, cursor:"pointer",
+            display:"flex", alignItems:"center", justifyContent:"center",
+          }}>
+            <Bell size={17} color={C.grayDark} />
+          </button>
+          <Profile />
         </div>
       </nav>
 
-      <>
-        {sidebarOpen && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden transition-opacity" onClick={toggleSidebar} />
-        )}
+      {/* ── LEFT SIDEBAR ─────────────────────────────────────────────────────── */}
+      {sidebarOpen && (
+        <div
+          onClick={toggleSidebar}
+          style={{
+            position:"fixed", inset:0, background:"rgba(0,0,0,0.35)",
+            zIndex:80, backdropFilter:"blur(2px)",
+          }}
+        />
+      )}
 
-        {/* Left (tool) sidebar */}
-        <aside
-          className={`fixed top-16 left-0 h-[calc(100vh-4rem)] bg-white/95 backdrop-blur-sm shadow-2xl transition-all duration-500 ease-in-out z-40 overflow-y-auto border-r border-gray-200 ${
-            sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-          } w-80`}
-          style={{ boxShadow: '4px 0 24px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05)' }}
-        >
-          {/* ... same code as before ... */}
-          <div className="p-6">
-            <div className="flex items-center justify-between mb-6 pb-5 border-b-2 border-gray-200">
-              <h2 className="text-xl font-extrabold text-gray-800 flex items-center">
-                <span className="mr-3 text-2xl drop-shadow-sm">🛠️</span>
-                <span className="text-blue-600">CSV Tools</span>
-              </h2>
-              <button onClick={toggleSidebar} className="p-2 rounded-lg hover:bg-red-50 lg:hidden transition-all duration-200 hover:scale-110">
-                <svg className="w-5 h-5 text-gray-600 hover:text-red-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
+      <aside style={{
+        position:"fixed", top:60, left:0,
+        height:"calc(100vh - 60px)", width:290,
+        background:C.white,
+        boxShadow: sidebarOpen ? "6px 0 32px rgba(0,0,0,0.12)" : "none",
+        transform: sidebarOpen ? "translateX(0)" : "translateX(-100%)",
+        transition:"transform 0.32s cubic-bezier(0.4,0,0.2,1)",
+        zIndex:90, overflowY:"auto",
+        borderRight:`1px solid ${C.grayLight}`,
+      }}>
+        <div style={{ padding:"20px 16px 100px" }}>
+          {/* Header */}
+          <div style={{ ...flex("center","space-between"), marginBottom:20,
+            paddingBottom:16, borderBottom:`1px solid ${C.grayLight}` }}>
+            <span style={{ fontSize:15, fontWeight:700 }}>CSV Tools</span>
+            <button onClick={toggleSidebar} style={{
+              width:30, height:30, borderRadius:"50%", border:`1px solid ${C.grayLight}`,
+              background:C.white, cursor:"pointer",
+              display:"flex", alignItems:"center", justifyContent:"center",
+            }}><X size={14} color={C.grayMid} /></button>
+          </div>
 
-            {!hasLoadedFiles && (
-              <div className="mb-6 p-5 bg-gradient-to-br from-amber-50 via-orange-50 to-amber-50 border-2 border-amber-300 rounded-2xl shadow-sm relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-20 h-20 bg-amber-200 rounded-full opacity-20 -mr-10 -mt-10"></div>
-                <p className="font-bold mb-2 text-amber-900 flex items-center relative z-10">
-                  <span className="mr-2 text-xl animate-pulse">⚠️</span>
-                  No File Loaded
-                </p>
-                <p className="text-xs text-amber-800 leading-relaxed relative z-10">Upload a CSV file to activate the tools</p>
+          {/* No file warning */}
+          {!hasFiles && (
+            <div style={{
+              background:C.yellow, borderRadius:12, padding:"12px 14px",
+              marginBottom:16, border:`1.5px solid ${C.yellowDeep}`,
+              display:"flex", gap:10, alignItems:"flex-start",
+            }}>
+              <Upload size={16} color={C.yellowDeep} style={{ flexShrink:0, marginTop:1 }} />
+              <div>
+                <div style={{ fontWeight:700, fontSize:13, marginBottom:2 }}>No file loaded</div>
+                <div style={{ fontSize:12, color:C.grayDark }}>Upload a CSV to activate tools.</div>
               </div>
-            )}
-            <nav className="space-y-2">
-              {tools.map((tool) => (
-                <button
-                  key={tool.id}
-                  onClick={() => handleToolSelect(tool.id)}
-                  className={`w-full flex items-start space-x-3 px-4 py-4 rounded-2xl transition-all duration-300 transform relative overflow-hidden group ${
-                    activeTool === tool.id && hasLoadedFiles
-                      ? 'bg-blue-600 text-white shadow-xl scale-[1.02] ring-2 ring-blue-300'
-                      : 'text-gray-700 hover:bg-blue-50 hover:shadow-lg hover:scale-[1.01] hover:ring-1 hover:ring-blue-200'
-                  }`}
-                  title={tool.description}
-                >
-                  <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
-                  <span className={`text-2xl flex-shrink-0 transform transition-all duration-300 ${
-                    activeTool === tool.id && hasLoadedFiles ? 'scale-110 drop-shadow-lg' : 'group-hover:scale-110'
-                  }`}>{tool.icon}</span>
-                  <div className="text-left flex-1 relative z-10">
-                    <p className="font-bold text-sm">{tool.name}</p>
-                    <p className={`text-xs mt-1 transition-colors duration-300 ${
-                      activeTool === tool.id && hasLoadedFiles ? 'text-blue-100' : 'text-gray-500 group-hover:text-gray-700'
-                    }`}>{tool.description}</p>
-                  </div>
-                </button>
-              ))}
-            </nav>
-          </div>
-        </aside>
-      </>
+            </div>
+          )}
 
-      {/* Responsive right panel with Undo/Redo */}
-      <aside className="hidden xl:block fixed right-0 top-16 w-80 h-[calc(100vh-4rem)] bg-white/95 backdrop-blur-sm shadow-2xl z-30 overflow-y-auto border-l border-gray-200 p-4 space-y-4">
-        {/* OVERVIEW and Edit Mode (unchanged) */}
-        {currentDataSummary ? (
-          <div className="p-4 bg-blue-50 rounded-2xl border-2 border-blue-200 shadow-lg">
-            <h3 className="text-sm font-semibold text-blue-900 mb-3 flex items-center gap-2">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-              Dataset Overview
-            </h3>
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="bg-white p-2 rounded-lg">
-                <span className="text-gray-600 block">Total Rows</span>
-                <span className="font-bold text-gray-900 text-lg">{currentDataSummary.totalRows}</span>
-              </div>
-              <div className="bg-white p-2 rounded-lg">
-                <span className="text-gray-600 block">Columns</span>
-                <span className="font-bold text-gray-900 text-lg">{currentDataSummary.headers.length}</span>
-              </div>
-              <div className="bg-white p-2 rounded-lg">
-                <span className="text-gray-600 block">Visible</span>
-                <span className="font-bold text-gray-900 text-lg">{currentDataSummary.headers.length - currentHiddenColumns.length}</span>
-              </div>
-              <div className="bg-white p-2 rounded-lg">
-                <span className="text-gray-600 block">Hidden</span>
-                <span className="font-bold text-gray-900 text-lg">{currentHiddenColumns.length}</span>
-              </div>
-            </div>
+          {/* Category filter */}
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:14 }}>
+            {CATS.map(c => (
+              <button key={c.id} onClick={()=>setActiveCat(c.id)} style={{
+                padding:"4px 12px", borderRadius:100, fontSize:12, fontWeight:600,
+                border:`1.5px solid ${activeCat===c.id ? C.black : C.grayLight}`,
+                background: activeCat===c.id ? C.black : C.white,
+                color: activeCat===c.id ? C.yellowMid : C.grayDark,
+                cursor:"pointer", transition:"all 0.18s",
+              }}>{c.label}</button>
+            ))}
           </div>
-        ) : (
-          <div className="p-5 bg-gradient-to-br from-gray-50 to-white rounded-2xl border-2 border-gray-200 shadow-lg">
-            <div className="text-center py-4">
-              <svg className="w-12 h-12 mx-auto text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2m0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-              <p className="text-sm text-gray-600 font-medium">Dataset info will appear here</p>
-            </div>
-          </div>
-        )}
-        {/* UNDO/REDO logic, edit status and keyboard tips - functional! */}
-        {currentDataSummary && currentDisplayData ? (
-          <div className="p-5 bg-gradient-to-br from-blue-50 to-white rounded-2xl border-2 border-blue-200 shadow-lg">
-            <div className="flex items-center gap-2 mb-3">
-              <div className={`w-3 h-3 rounded-full ${currentEditMode ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
-              <h3 className="text-sm font-bold text-gray-800">{currentEditMode ? '✏️ Editing' : '👁️ Viewing'}</h3>
-            </div>
-            <p className="text-xs text-gray-600 mb-4 leading-relaxed">
-              {currentEditMode ? 'Double-click any cell to edit values.' : 'Enable editing mode to modify your data.'}
-            </p>
-            <button 
-              onClick={() => { if (editModeToggler) editModeToggler(); }}
-              className={`w-full px-4 py-3 rounded-xl font-semibold transition-all transform hover:scale-105 shadow-md text-sm ${
-                currentEditMode ? 'bg-gray-600 text-white hover:bg-gray-700 ring-2 ring-gray-300' : 'bg-blue-600 text-white hover:bg-blue-700 ring-2 ring-blue-300'
-              }`}
-            >
-              {currentEditMode ? '🔒 Lock Table' : '🔓 Enable Editing'}
-            </button>
-          </div>
-        ) : (
-          <div className="p-5 bg-gradient-to-br from-gray-50 to-white rounded-2xl border-2 border-gray-200 shadow-lg">
-            <div className="text-center py-4">
-              <svg className="w-12 h-12 mx-auto text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <p className="text-sm text-gray-600 font-medium">Upload a CSV file to enable editing</p>
-            </div>
-          </div>
-        )}
 
-        {/* Undo/Redo history panel with working buttons */}
-        {currentDataSummary && currentDisplayData ? (
-          <div className="p-5 bg-white rounded-2xl border-2 border-blue-200 shadow-lg">
-            <h4 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
-              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              History Controls
-            </h4>
-            <div className="space-y-3">
-              <button
-                onClick={() => { if (undoHandler) { undoHandler(); } }}
-                disabled={!currentHistory.canUndo}
-                className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl shadow-md text-sm font-medium transition-all ${
-                  currentHistory.canUndo ? 'bg-gray-600 text-white hover:bg-gray-700 cursor-pointer' : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                }`}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                </svg>
-                Undo {currentHistory.canUndo ? '✓' : '✗'}
-              </button>
-              <button
-                onClick={() => { if (redoHandler) { redoHandler(); } }}
-                disabled={!currentHistory.canRedo}
-                className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl shadow-md text-sm font-medium transition-all ${
-                  currentHistory.canRedo ? 'bg-gray-600 text-white hover:bg-gray-700 cursor-pointer' : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                }`}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2m18-10l-6 6m6-6l-6-6" />
-                </svg>
-                Redo {currentHistory.canRedo ? '✓' : '✗'}
-              </button>
-              <div className="mt-4 px-4 py-3 bg-gradient-to-r from-blue-50 to-gray-50 rounded-xl text-center border border-blue-200">
-                <div className="text-2xl font-bold text-gray-800">{currentHistory.historySize}</div>
-                <div className="text-xs text-gray-600 mt-1">{currentHistory.historySize === 1 ? 'change saved' : 'changes saved'}</div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="p-5 bg-white rounded-2xl border-2 border-gray-200 shadow-lg">
-            <div className="text-center py-4">
-              <svg className="w-12 h-12 mx-auto text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <p className="text-sm text-gray-600 font-medium">Edit history will appear here</p>
-            </div>
-          </div>
-        )}
-
-        <div className="p-4 bg-gradient-to-br from-gray-50 to-white rounded-2xl border-2 border-gray-200 shadow-sm">
-          <h4 className="text-xs font-bold text-gray-700 mb-3 flex items-center gap-2">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            Keyboard Shortcuts
-          </h4>
-          <div className="space-y-2 text-xs text-gray-600">
-            <div className="flex justify-between items-center">
-              <span>Undo</span>
-              <kbd className="px-2 py-1 bg-white border border-gray-300 rounded text-xs font-mono shadow-sm">Ctrl+Z</kbd>
-            </div>
-            <div className="flex justify-between items-center">
-              <span>Redo</span>
-              <kbd className="px-2 py-1 bg-white border border-gray-300 rounded text-xs font-mono shadow-sm">Ctrl+Y</kbd>
-            </div>
-          </div>
+          {/* Tools list */}
+          {(activeCat==="all" ? TOOLS : TOOLS.filter(t=>t.cat===activeCat))
+            .map(tool => <SidebarTool key={tool.id} tool={tool} />)}
         </div>
       </aside>
 
-      {/* Responsive main (adds padding for right panel only on xl+) */}
-      <main className={`transition-all duration-300 ${sidebarOpen ? 'lg:ml-80' : 'ml-0'} xl:pr-80 pt-16`}>
-        {currentView === 'home' ? (
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <TabManager tabs={tabs} activeTab={activeTab} onTabChange={handleTabChange} onTabClose={handleTabClose} onTabAdd={handleTabAdd} />
-            <div className="mt-6">
-              <div className="bg-white/95 backdrop-blur-sm shadow-2xl rounded-2xl p-6 sm:p-8 border-2 border-gray-200">
-                {tabs.map(tab => (
-                  <TabContent
-                    key={tab.id}
-                    tabId={tab.id}
-                    isActive={activeTab === tab.id}
-                    onFileLoaded={(fileName) => handleFileLoaded(tab.id, fileName)}
-                    onDataModified={() => handleDataModified(tab.id)}
-                    activeTool={activeTool}
-                    onClearTool={() => setActiveTool(null)}
-                    toolName={tools.find(t => t.id === activeTool)?.name}
-                    toolIcon={tools.find(t => t.id === activeTool)?.icon}
-                    toolDescription={tools.find(t => t.id === activeTool)?.description}
-                    onDataSummaryChange={(summary) => activeTab === tab.id && setCurrentDataSummary(summary)}
-                    onEditModeChange={(mode) => activeTab === tab.id && setCurrentEditMode(mode)}
-                    onHistoryChange={(history) => activeTab === tab.id && setCurrentHistory(history)}
-                    onDisplayDataChange={(data) => activeTab === tab.id && setCurrentDisplayData(data)}
-                    onHiddenColumnsChange={(cols) => activeTab === tab.id && setCurrentHiddenColumns(cols)}
-                    onToggleEditModeRegister={(toggleFn) => activeTab === tab.id && setEditModeToggler(() => toggleFn)}
-                    onUndoRegister={(undoFn) => activeTab === tab.id && setUndoHandler(() => undoFn)}
-                    onRedoRegister={(redoFn) => activeTab === tab.id && setRedoHandler(() => redoFn)}
-                  />
+      {/* ── RIGHT PANEL (desktop) ─────────────────────────────────────────────── */}
+      <aside className="right-panel" style={{
+        position:"fixed", top:60, right:0,
+        width:280, height:"calc(100vh - 60px)",
+        background:C.white, borderLeft:`1px solid ${C.grayLight}`,
+        overflowY:"auto", padding:"20px 16px 80px", zIndex:30,
+      }}>
+        {/* Dataset overview */}
+        <div style={{ marginBottom:16 }}>
+          <div style={{ fontSize:11, fontWeight:700, textTransform:"uppercase",
+            letterSpacing:"0.08em", color:C.grayMid, marginBottom:12 }}>
+            Dataset
+          </div>
+          {dataSummary ? (
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+              {[
+                { label:"Rows",    value:dataSummary.totalRows,                                dark:true,  icon:Hash    },
+                { label:"Columns", value:dataSummary.headers.length,                           dark:false, icon:Layers  },
+                { label:"Visible", value:dataSummary.headers.length - hiddenCols.length,       dark:false, icon:Eye     },
+                { label:"Changes", value:history.historySize,                                  dark:false, icon:FileText},
+              ].map(item => (
+                <div key={item.label} style={{
+                  background: item.dark ? C.black : C.grayLighter,
+                  borderRadius:12, padding:"12px 14px",
+                }}>
+                  <div style={{ fontSize:11, color: item.dark?"#aaa":C.grayMid, marginBottom:4,
+                    display:"flex", alignItems:"center", gap:4 }}>
+                    <item.icon size={11} />
+                    {item.label}
+                  </div>
+                  <div style={{ fontSize:22, fontWeight:700,
+                    color: item.dark ? C.yellowMid : C.black }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ background:C.grayLighter, borderRadius:12, padding:"20px 14px",
+              textAlign:"center" }}>
+              <BarChart2 size={28} color={C.grayLight} style={{ margin:"0 auto 8px" }} />
+              <p style={{ fontSize:13, color:C.grayMid, margin:0 }}>
+                Upload a file to see dataset info
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Edit mode */}
+        {dataSummary && displayData && (
+          <div style={{ marginBottom:16 }}>
+            <div style={{ fontSize:11, fontWeight:700, textTransform:"uppercase",
+              letterSpacing:"0.08em", color:C.grayMid, marginBottom:12 }}>
+              Edit Mode
+            </div>
+            <div style={{ background:C.grayLighter, borderRadius:12, padding:"14px" }}>
+              <div style={{ ...flex("center","flex-start",8), marginBottom:10 }}>
+                <div style={{
+                  width:8, height:8, borderRadius:"50%",
+                  background: editMode ? "#22c55e" : C.grayLight,
+                  boxShadow: editMode ? "0 0 0 3px #22c55e33" : "none",
+                }} />
+                <span style={{ fontSize:13, fontWeight:600 }}>
+                  {editMode ? "Editing" : "View only"}
+                </span>
+              </div>
+              <p style={{ fontSize:12, color:C.grayMid, marginBottom:12, lineHeight:1.5 }}>
+                {editMode ? "Double-click any cell to edit." : "Enable editing to modify data."}
+              </p>
+              <button
+                onClick={() => editToggler && editToggler()}
+                style={{
+                  width:"100%", padding:"10px 0", borderRadius:10, border:"none",
+                  background: editMode ? C.grayDark : C.black,
+                  color: C.yellowMid, fontWeight:700, fontSize:13, cursor:"pointer",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+                }}
+              >
+                {editMode
+                  ? <><Lock size={14}/> Lock Table</>
+                  : <><PenLine size={14}/> Enable Editing</>}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Undo / Redo */}
+        {dataSummary && displayData && (
+          <div style={{ marginBottom:16 }}>
+            <div style={{ fontSize:11, fontWeight:700, textTransform:"uppercase",
+              letterSpacing:"0.08em", color:C.grayMid, marginBottom:12 }}>
+              History
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
+              {[
+                { label:"Undo", fn:undoFn, can:history.canUndo, Icon:Undo2 },
+                { label:"Redo", fn:redoFn, can:history.canRedo, Icon:Redo2 },
+              ].map(b => (
+                <button key={b.label}
+                  onClick={() => b.fn && b.fn()}
+                  disabled={!b.can}
+                  style={{
+                    padding:"10px 0", borderRadius:10, border:"none", fontWeight:600,
+                    fontSize:13, cursor: b.can ? "pointer" : "not-allowed",
+                    background: b.can ? C.black : C.grayLight,
+                    color: b.can ? C.yellowMid : C.grayMid,
+                    display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+                    transition:"all 0.18s",
+                  }}
+                >
+                  <b.Icon size={14} />{b.label}
+                </button>
+              ))}
+            </div>
+            <div style={{ background:C.yellow, borderRadius:10, padding:"10px 14px",
+              textAlign:"center", border:`1px solid ${C.yellowDeep}33` }}>
+              <div style={{ fontSize:22, fontWeight:700 }}>{history.historySize}</div>
+              <div style={{ fontSize:11, color:C.grayMid }}>
+                {history.historySize===1 ? "change saved" : "changes saved"}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Keyboard shortcuts */}
+        <div style={{ fontSize:11, fontWeight:700, textTransform:"uppercase",
+          letterSpacing:"0.08em", color:C.grayMid, marginBottom:10 }}>
+          Shortcuts
+        </div>
+        <div style={{ background:C.grayLighter, borderRadius:12, padding:"12px 14px" }}>
+          {[["Undo","Ctrl+Z"],["Redo","Ctrl+Y"],["Edit cell","Dbl-click"]].map(([a,k])=>(
+            <div key={a} style={{ ...flex("center","space-between"), marginBottom:8 }}>
+              <span style={{ fontSize:12, color:C.grayDark }}>{a}</span>
+              <kbd style={{
+                background:C.white, border:`1px solid ${C.grayLight}`, borderRadius:6,
+                padding:"2px 8px", fontSize:11, fontFamily:"monospace", color:C.grayDark,
+              }}>{k}</kbd>
+            </div>
+          ))}
+        </div>
+      </aside>
+
+      {/* ── MAIN CONTENT ─────────────────────────────────────────────────────── */}
+      <main style={{
+        marginTop:60, paddingBottom:88,
+        marginLeft:0,        /* sidebar overlays, doesn't push */
+        paddingRight:0,      /* right panel handled via CSS class */
+      }} className="main-with-right-panel">
+
+        {currentView === "home" ? (<>
+
+          {/* ── HERO STRIP ── */}
+          <div style={{ background:C.white, padding:"28px 32px 0",
+            borderBottom:`1px solid ${C.grayLight}` }}>
+            <div style={{ maxWidth:900, margin:"0 auto" }}>
+              <p style={{ fontSize:13, color:C.grayMid, marginBottom:6 }}>
+                Good day 👋
+              </p>
+              <h1 style={{ fontSize:32, fontWeight:800, margin:"0 0 20px",
+                letterSpacing:"-0.5px", lineHeight:1.2 }}>
+                What will you{" "}
+                <span style={{ color:C.yellowDeep }}>process</span> today?
+              </h1>
+
+              {/* Search */}
+              <div style={{
+                display:"flex", alignItems:"center", gap:12,
+                background:C.grayLighter, borderRadius:100,
+                padding:"12px 20px", maxWidth:560, marginBottom:20,
+                border:`1.5px solid transparent`,
+                transition:"all 0.2s",
+              }}
+                onFocus={e=>{ e.currentTarget.style.border=`1.5px solid ${C.yellowDeep}`; e.currentTarget.style.background=C.white; }}
+                onBlur={e=>{ e.currentTarget.style.border="1.5px solid transparent"; e.currentTarget.style.background=C.grayLighter; }}
+              >
+                <Search size={17} color={C.grayMid} />
+                <input
+                  type="text"
+                  placeholder="Search tools, columns, functions…"
+                  style={{
+                    border:"none", background:"transparent", fontSize:14,
+                    color:C.grayDark, width:"100%", outline:"none", fontFamily:"inherit",
+                  }}
+                />
+              </div>
+
+              {/* Category pills */}
+              <div style={{ display:"flex", gap:8, paddingBottom:20, overflowX:"auto",
+                scrollbarWidth:"none" }}>
+                {CATS.map(c => (
+                  <button key={c.id} onClick={()=>setActiveCat(c.id)} style={{
+                    flexShrink:0, padding:"7px 18px", borderRadius:100, fontSize:13,
+                    fontWeight:600, cursor:"pointer", transition:"all 0.18s", border:"none",
+                    background: activeCat===c.id ? C.black : C.grayLighter,
+                    color: activeCat===c.id ? C.yellowMid : C.grayDark,
+                  }}>{c.label}</button>
                 ))}
               </div>
             </div>
           </div>
-        ) : (
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border-2 border-gray-200">
-              <h1 className="text-4xl font-bold mb-4 text-blue-600">About CSV Processor</h1>
-              <p className="text-gray-600 mb-6 text-lg">A powerful, multi-tab CSV processing application built with React.</p>
-              <div className="grid md:grid-cols-2 gap-6 mt-8">
-                <div className="border-l-4 border-blue-600 pl-6 bg-blue-50 p-4 rounded-r-lg shadow-sm">
-                  <h3 className="font-bold text-xl mb-3 text-gray-800">Features</h3>
-                  <ul className="space-y-2 text-gray-600">
-                    <li>• Multi-tab file processing</li>
-                    <li>• Sort and filter data</li>
-                    <li>• Column management</li>
-                    <li>• Data cleaning tools</li>
-                    <li>• Advanced analytics</li>
-                    <li>• Statistical analysis</li>
-                  </ul>
+
+          {/* ── PAGE BODY ── */}
+          <div style={{ maxWidth:900, margin:"0 auto", padding:"28px 32px" }}>
+
+            {/* Upload zone */}
+            {!hasFiles && (
+              <div style={{
+                borderRadius:20, border:`2px dashed ${C.yellowDeep}`,
+                background:C.yellow, padding:"40px 32px", textAlign:"center",
+                marginBottom:28, cursor:"pointer",
+                transition:"all 0.2s",
+              }}
+                onMouseEnter={e=>e.currentTarget.style.background="#fff8d0"}
+                onMouseLeave={e=>e.currentTarget.style.background=C.yellow}
+              >
+                <div style={{
+                  width:56, height:56, borderRadius:16, background:C.white,
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  margin:"0 auto 14px", boxShadow:`0 4px 12px ${C.yellowDeep}33`,
+                }}>
+                  <Upload size={26} color={C.yellowDeep} />
                 </div>
-                <div className="border-l-4 border-blue-600 pl-6 bg-blue-50 p-4 rounded-r-lg shadow-sm">
-                  <h3 className="font-bold text-xl mb-3 text-gray-800">Capabilities</h3>
-                  <ul className="space-y-2 text-gray-600">
-                    <li>• Multiple files simultaneously</li>
-                    <li>• Real-time processing</li>
-                    <li>• Export processed data</li>
-                    <li>• Pivot tables & grouping</li>
-                    <li>• Data visualization</li>
-                  </ul>
+                <div style={{ fontSize:18, fontWeight:700, marginBottom:6 }}>
+                  Drop your CSV here
+                </div>
+                <div style={{ fontSize:14, color:C.grayDark, marginBottom:18 }}>
+                  Supports .csv · .tsv · .xlsx up to 50 MB
+                </div>
+                <button style={{
+                  background:C.black, color:C.yellowMid,
+                  padding:"12px 32px", borderRadius:100,
+                  fontSize:14, fontWeight:700, border:"none", cursor:"pointer",
+                  display:"inline-flex", alignItems:"center", gap:8,
+                }}>
+                  <Upload size={15} /> Browse files
+                </button>
+              </div>
+            )}
+
+            {/* Dataset stats row */}
+            {dataSummary && (
+              <div style={{
+                display:"grid",
+                gridTemplateColumns:"repeat(4,1fr)",
+                gap:12, marginBottom:28,
+              }}>
+                <StatCard label="Total Rows"  value={dataSummary.totalRows}                                dark icon={Hash}     />
+                <StatCard label="Columns"     value={dataSummary.headers.length}                           icon={Layers}    />
+                <StatCard label="Visible"     value={dataSummary.headers.length - hiddenCols.length}       icon={Eye}       />
+                <StatCard label="Changes"     value={history.historySize}                                  icon={FileText}  />
+              </div>
+            )}
+
+            {/* Edit / Undo / Redo action bar */}
+            {dataSummary && displayData && (
+              <div style={{
+                ...card(), padding:"14px 18px",
+                display:"flex", alignItems:"center", gap:12, marginBottom:28,
+                flexWrap:"wrap",
+              }}>
+                <button
+                  onClick={()=>editToggler && editToggler()}
+                  style={{
+                    display:"flex", alignItems:"center", gap:8,
+                    padding:"10px 20px", borderRadius:10, border:"none",
+                    background:C.black, color:C.yellowMid,
+                    fontWeight:700, fontSize:13, cursor:"pointer",
+                  }}
+                >
+                  {editMode ? <><Lock size={14}/> Lock Table</> : <><PenLine size={14}/> Enable Editing</>}
+                </button>
+                <div style={{ width:1, height:28, background:C.grayLight }} />
+                {[
+                  { label:"Undo", fn:undoFn, can:history.canUndo, Icon:Undo2 },
+                  { label:"Redo", fn:redoFn, can:history.canRedo, Icon:Redo2 },
+                ].map(b=>(
+                  <button key={b.label}
+                    onClick={()=>b.fn&&b.fn()} disabled={!b.can}
+                    style={{
+                      display:"flex", alignItems:"center", gap:7,
+                      padding:"10px 18px", borderRadius:10,
+                      border:`1.5px solid ${b.can ? C.grayLight : C.grayLight}`,
+                      background: b.can ? C.white : C.grayLighter,
+                      color: b.can ? C.black : C.grayMid,
+                      fontWeight:600, fontSize:13,
+                      cursor: b.can ? "pointer" : "not-allowed",
+                      transition:"all 0.18s",
+                    }}
+                  ><b.Icon size={14}/>{b.label}</button>
+                ))}
+                <div style={{ marginLeft:"auto",
+                  fontSize:13, color:C.grayMid, display:"flex", alignItems:"center", gap:6 }}>
+                  <div style={{
+                    width:8, height:8, borderRadius:"50%",
+                    background: editMode ? "#22c55e" : C.grayLight,
+                    boxShadow: editMode ? "0 0 0 3px #22c55e33" : "none",
+                  }}/>
+                  {editMode ? "Editing enabled" : "View only"}
                 </div>
               </div>
+            )}
+
+            {/* Tool grid */}
+            <div style={{ marginBottom:8 }}>
+              <div style={{ ...flex("center","space-between"), marginBottom:16 }}>
+                <h2 style={{ margin:0, fontSize:18, fontWeight:700 }}>Quick Tools</h2>
+                <button onClick={toggleSidebar} style={{
+                  display:"flex", alignItems:"center", gap:6,
+                  background:"none", border:`1.5px solid ${C.grayLight}`,
+                  borderRadius:100, padding:"6px 14px", fontSize:13,
+                  fontWeight:600, cursor:"pointer", color:C.grayDark,
+                }}>
+                  <Wrench size={13}/> All tools
+                </button>
+              </div>
+              <div style={{
+                display:"grid",
+                gridTemplateColumns:"repeat(auto-fill,minmax(190px,1fr))",
+                gap:12,
+              }}>
+                {filteredTools.map((tool, i) => (
+                  <ToolCard key={tool.id} tool={tool} featured={i===0} />
+                ))}
+              </div>
+            </div>
+
+            {/* Tabs + content */}
+            <div style={{ marginTop:36 }}>
+              <div style={{ ...flex("center","space-between"), marginBottom:14 }}>
+                <h2 style={{ margin:0, fontSize:18, fontWeight:700 }}>Open Files</h2>
+              </div>
+
+              {/* Tab bar */}
+              <div style={{
+                display:"flex", gap:6, overflowX:"auto",
+                scrollbarWidth:"none", alignItems:"flex-end",
+              }}>
+                {tabs.map(tab => {
+                  const active = activeTab===tab.id;
+                  return (
+                    <div key={tab.id}
+                      style={{
+                        flexShrink:0, padding:"8px 16px",
+                        borderRadius:"12px 12px 0 0", fontSize:13, fontWeight:600,
+                        background: active ? C.white : C.grayLighter,
+                        color: active ? C.black : C.grayMid,
+                        border:`1.5px solid ${active ? C.grayLight : "transparent"}`,
+                        borderBottom:"none", cursor:"pointer",
+                        display:"flex", alignItems:"center", gap:8,
+                      }}
+                      onClick={()=>handleTabChange(tab.id)}
+                    >
+                      <FileText size={13}/>
+                      {tab.modified && <span style={{color:C.yellowDeep,fontSize:10}}>●</span>}
+                      {tab.fileName ? tab.fileName.replace(/\.[^.]+$/,"") : `New Tab ${tab.id}`}
+                      {tabs.length > 1 && (
+                        <span
+                          onClick={e=>{e.stopPropagation();handleTabClose(tab.id);}}
+                          style={{ color:C.grayMid, cursor:"pointer",
+                            display:"flex", alignItems:"center" }}
+                        ><X size={12}/></span>
+                      )}
+                    </div>
+                  );
+                })}
+                <button onClick={handleTabAdd} style={{
+                  width:32, height:32, borderRadius:10,
+                  border:`1.5px solid ${C.grayLight}`, background:C.white,
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  cursor:"pointer", color:C.grayMid, alignSelf:"center",
+                }}><Plus size={15}/></button>
+              </div>
+
+              {/* Content card */}
+              <div style={{
+                background:C.white, borderRadius:"0 12px 12px 12px",
+                padding:"24px", border:`1.5px solid ${C.grayLight}`,
+                borderTop:"none",
+              }}>
+                {tabs.map(tab => (
+                  <TabContent
+                    key={tab.id}
+                    tabId={tab.id}
+                    isActive={activeTab===tab.id}
+                    onFileLoaded={name => handleFileLoaded(tab.id, name)}
+                    onDataModified={() => handleDataModified(tab.id)}
+                    activeTool={activeTool}
+                    onClearTool={() => setActiveTool(null)}
+                    toolName={activeTool_?.name}
+                    toolIcon={activeTool_?.icon}
+                    toolDescription={activeTool_?.desc}
+                    onDataSummaryChange={s => activeTab===tab.id && setDataSummary(s)}
+                    onEditModeChange={m    => activeTab===tab.id && setEditMode(m)}
+                    onHistoryChange={h     => activeTab===tab.id && setHistory(h)}
+                    onDisplayDataChange={d => activeTab===tab.id && setDisplayData(d)}
+                    onHiddenColumnsChange={c=>activeTab===tab.id && setHiddenCols(c)}
+                    onToggleEditModeRegister={fn=>activeTab===tab.id && setEditToggler(()=>fn)}
+                    onUndoRegister={fn => activeTab===tab.id && setUndoFn(()=>fn)}
+                    onRedoRegister={fn => activeTab===tab.id && setRedoFn(()=>fn)}
+                  />
+                ))}
+              </div>
+            </div>
+
+          </div>
+
+        </>) : (
+
+          /* ── ABOUT VIEW ─────────────────────────────────────────────────────── */
+          <div style={{ maxWidth:800, margin:"0 auto", padding:"40px 32px 100px" }}>
+            <div style={{ ...card(), padding:"36px 36px 32px", marginBottom:20 }}>
+              <div style={{ ...flex("center","flex-start",12), marginBottom:20 }}>
+                <div style={{
+                  width:52, height:52, borderRadius:16, background:C.black,
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                }}>
+                  <span style={{ fontSize:22, fontWeight:800, color:C.yellowMid }}>D</span>
+                </div>
+                <div>
+                  <h1 style={{ fontSize:28, fontWeight:800, margin:0,
+                    color:C.black, textAlign:"left" }}>DCP</h1>
+                  <p style={{ margin:0, fontSize:14, color:C.yellowDeep, fontWeight:600 }}>
+                    Data CSV Processor
+                  </p>
+                </div>
+              </div>
+              <p style={{ fontSize:15, color:C.grayDark, lineHeight:1.7, margin:0 }}>
+                A fast, browser-based tool for loading, cleaning, reshaping, and exporting
+                CSV data. Built for both mobile and desktop workflows.
+              </p>
+            </div>
+
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+              {[
+                { Icon:FileText,        name:"Multi-tab",    desc:"Work on several files simultaneously without losing context." },
+                { Icon:Eraser,          name:"Clean",        desc:"Remove duplicates, blank rows, and messy data in one click." },
+                { Icon:BarChart2,       name:"Statistics",   desc:"Sum, average, min and max for any numeric column instantly." },
+                { Icon:TableProperties, name:"Pivot",        desc:"Drag and drop pivot tables without writing any formulas." },
+                { Icon:LineChart,       name:"Charts",       desc:"Turn any column into a visual chart in seconds." },
+                { Icon:Download,        name:"Export",       desc:"Download your cleaned, transformed data as a fresh CSV." },
+              ].map(f => (
+                <div key={f.name} style={{
+                  ...card(), padding:"20px 22px",
+                  display:"flex", gap:14, alignItems:"flex-start",
+                }}>
+                  <div style={{
+                    width:40, height:40, borderRadius:10, background:C.yellow, flexShrink:0,
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                  }}>
+                    <f.Icon size={20} color={C.yellowDeep} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize:14, fontWeight:700, marginBottom:4 }}>{f.name}</div>
+                    <div style={{ fontSize:13, color:C.grayMid, lineHeight:1.5 }}>{f.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{
+              ...card(), padding:"24px 28px", marginTop:20,
+              background:C.black, border:"none",
+            }}>
+              <div style={{ fontSize:15, fontWeight:700, color:C.yellowMid, marginBottom:8 }}>
+                Built for every screen
+              </div>
+              <p style={{ fontSize:14, color:"#aaa", lineHeight:1.7, margin:0 }}>
+                Designed mobile-first with a bottom navigation pattern and large tap targets,
+                then extended to a full three-column desktop layout with a tool sidebar and
+                live dataset panel — all without a page refresh.
+              </p>
             </div>
           </div>
         )}
       </main>
+
+      {/* ── BOTTOM NAV (mobile only) ──────────────────────────────────────────── */}
+      <nav className="mobile-only" style={{
+        position:"fixed", bottom:0, left:0, right:0, zIndex:100,
+        background:C.white, borderTop:`1px solid ${C.grayLight}`,
+        display:"flex", justifyContent:"space-around",
+        padding:"8px 0 22px",
+      }}>
+        {[
+          { id:"home",  label:"Home",  Icon:Home    },
+          { id:"tools", label:"Tools", Icon:Wrench  },
+          { id:"files", label:"Files", Icon:FileText},
+          { id:"about", label:"About", Icon:Info    },
+        ].map(item => {
+          const active = mobileTab===item.id;
+          return (
+            <button key={item.id}
+              onClick={()=>{
+                setMobileTab(item.id);
+                if(item.id==="tools") { setSidebarOpen(true); }
+                else { setCurrentView(item.id==="about"?"about":"home"); setSidebarOpen(false); }
+              }}
+              style={{
+                display:"flex", flexDirection:"column", alignItems:"center",
+                gap:3, cursor:"pointer", minWidth:60, border:"none", background:"none",
+              }}
+            >
+              <item.Icon size={20} color={active ? C.black : C.grayMid} />
+              <span style={{ fontSize:10, fontWeight:600,
+                color: active ? C.black : C.grayMid }}>{item.label}</span>
+              {active && <div style={{
+                width:4, height:4, borderRadius:"50%",
+                background:C.yellowDeep, marginTop:1,
+              }}/>}
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }
-
-export default App;

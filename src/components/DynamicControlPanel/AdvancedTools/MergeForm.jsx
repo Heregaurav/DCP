@@ -78,8 +78,9 @@ function MergeForm({ allHeaders, onProcess, setActiveTool, worker }) {
       
       {/* File Upload Section */}
       <div className="mb-4 p-3 bg-white rounded border border-gray-200">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          📁 Upload File 2 (to join)
+        <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+          <svg className="w-4 h-4 text-[var(--primary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 7h4l2-3h6l2 3h4v13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7z"/></svg>
+          Upload File 2 (to join)
         </label>
         <input
           type="file"
@@ -106,7 +107,7 @@ function MergeForm({ allHeaders, onProcess, setActiveTool, worker }) {
 
       {/* Join Keys Selection */}
       <div className="mb-4 p-3 bg-white rounded border border-gray-200">
-        <h5 className="text-sm font-semibold text-gray-700 mb-3">🔑 Select Join Keys</h5>
+        <h5 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2"><svg className="w-4 h-4 text-[var(--primary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M12 11c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3z"/><path d="M19 21v-6a7 7 0 10-14 0v6"/></svg> Select Join Keys</h5>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -136,7 +137,7 @@ function MergeForm({ allHeaders, onProcess, setActiveTool, worker }) {
             >
               <option value="">
                 {mergeState.file2Headers.length === 0 
-                  ? '⚠️ Upload File 2 first...' 
+                  ? 'Upload File 2 first...' 
                   : 'Select key column...'}
               </option>
               {mergeState.file2Headers.map(h => (
@@ -149,7 +150,7 @@ function MergeForm({ allHeaders, onProcess, setActiveTool, worker }) {
 
       {/* Join Type Selection with Visual Diagrams */}
       <div className="mb-4 p-3 bg-white rounded border border-gray-200">
-        <h5 className="text-sm font-semibold text-gray-700 mb-3">🔗 Choose Join Type</h5>
+        <h5 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2"><svg className="w-4 h-4 text-[var(--primary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M10 13a5 5 0 007.07 0L21 9.07a5 5 0 00-7.07-7.07L10 5.93"/></svg> Choose Join Type</h5>
         <div className="space-y-2">
           {/* Left Join */}
           <label className="flex items-start p-3 border rounded cursor-pointer hover:bg-blue-50 transition-colors">
@@ -278,11 +279,11 @@ function MergeForm({ allHeaders, onProcess, setActiveTool, worker }) {
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
                 <span className="font-medium text-gray-800">Cross Join</span>
-                <span className="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded">⚠️ Large Output</span>
+                <span className="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded">Large Output</span>
               </div>
               <p className="text-xs text-gray-600">{joinDescriptions.cross}</p>
               <p className="text-xs text-red-600 mt-1">
-                ⚠️ Warning: Creates File1.rows × File2.rows combinations
+                Warning: Creates File1.rows × File2.rows combinations
               </p>
             </div>
           </label>

@@ -311,7 +311,7 @@ function TabContent({
         type: "UPDATE_DATA_FROM_EDIT",
         payload: { data: updatedData },
       });
-      setSuccessMessage("✓ Cell updated!");
+      setSuccessMessage("Cell updated");
       setTimeout(() => setSuccessMessage(null), 1500);
       onDataModified?.();
     }
@@ -326,7 +326,7 @@ function TabContent({
         type: "UPDATE_DATA_FROM_EDIT",
         payload: { data: previousState },
       });
-      setSuccessMessage("✓ Undo successful!");
+      setSuccessMessage("Undo successful");
       setTimeout(() => setSuccessMessage(null), 2000);
       onDataModified?.();
     }
@@ -341,7 +341,7 @@ function TabContent({
         type: "UPDATE_DATA_FROM_EDIT",
         payload: { data: nextState },
       });
-      setSuccessMessage("✓ Redo successful!");
+      setSuccessMessage("Redo successful");
       setTimeout(() => setSuccessMessage(null), 2000);
       onDataModified?.();
     }
@@ -708,7 +708,9 @@ function TabContent({
             </svg>
             <span className="font-medium">{successMessage}</span>
           </div>
-          <button onClick={() => setSuccessMessage(null)} className="text-green-600 hover:text-green-800 transition-colors">✕</button>
+          <button onClick={() => setSuccessMessage(null)} className="text-green-600 hover:text-green-800 transition-colors" aria-label="Dismiss success message">
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 6l12 12M6 18L18 6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
         </div>
       )}
 
@@ -816,7 +818,9 @@ function TabContent({
         <div className="mb-6">
           <div className="bg-blue-50 rounded-2xl p-8 border-2 border-dashed border-blue-300">
             <div className="text-center">
-              <span className="text-5xl mb-4 block">🛠️</span>
+              <span className="mb-4 block">
+                <svg className="w-14 h-14 mx-auto text-[var(--primary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M12 1v4"/><path d="M12 19v4"/><path d="M4.2 4.2l2.8 2.8"/><path d="M17 17l2.8 2.8"/></svg>
+              </span>
               <h3 className="text-xl font-bold text-gray-800 mb-2">Select a Tool to Get Started</h3>
               <p className="text-gray-600">Click on any tool from the sidebar to begin processing your CSV data</p>
             </div>

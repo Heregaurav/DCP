@@ -370,10 +370,10 @@ self.onmessage = (event) => {
             if (originalIndex !== -1) {
               FULL_DATASET[originalIndex] = { ...editedRow };
             } else {
-              console.warn('⚠️ Could not find row with ID:', editedRow._rowId);
+              console.warn('Could not find row with ID:', editedRow._rowId);
             }
           } else {
-            console.warn('⚠️ Edited row missing _rowId:', editedRow);
+            console.warn('Edited row missing _rowId:', editedRow);
           }
         });
 
@@ -1098,7 +1098,7 @@ function performMerge(key1, key2, joinType) {
       );
     }
     
-    console.log(`⚠️ Performing cross join: ${data1.length} × ${data2.length} = ${estimatedRows} rows`);
+    console.log(`Performing cross join: ${data1.length} × ${data2.length} = ${estimatedRows} rows`);
     
     data1.forEach(row1 => {
       data2.forEach(row2 => {
@@ -1115,5 +1115,5 @@ function performMerge(key1, key2, joinType) {
   FULL_DATASET = addRowIds(mergedData);
   SECONDARY_DATASET = [];
   
-  console.log(`✅ ${joinType.toUpperCase()} join complete: ${mergedData.length} rows created from ${data1.length} and ${data2.length} rows`);
+  console.log(`${joinType.toUpperCase()} join complete: ${mergedData.length} rows created from ${data1.length} and ${data2.length} rows`);
 }
