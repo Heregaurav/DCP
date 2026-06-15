@@ -17,7 +17,7 @@ dist-ssr
 # Local environment files (keep secrets safe)
 .env.local
 .env.*.local
-
+.env
 # Editor and system files
 .vscode/*
 !.vscode/extensions.json
